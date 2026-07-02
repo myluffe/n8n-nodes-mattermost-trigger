@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-mattermost-trigger",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "N8N node community. For receive Mattermost events",
   "keywords": [
     "n8n-community-node-package",
