@@ -56,6 +56,7 @@ export class MattermostTrigger implements INodeType {
 	};
 
 	async trigger(this: ITriggerFunctions): Promise<ITriggerResponse> {
+		let isClosing = true;
 		let client: WebSocket;
 		const credentials = (await this.getCredentials(
 			'mattermostTriggerApi'
@@ -63,9 +64,13 @@ export class MattermostTrigger implements INodeType {
 		const events = getAllowedEvents(this);
 
 		const startConsumer = async () => {
+			isClosing = false;
 			// Establish the Websocket connection and set up event listeners
 
 			//Create client
+			console.log(
+				`Connecting to Mattermost WebSocket at ${credentials.baseUrl}`
+			);
 			client = InitClient(credentials.baseUrl, credentials.token || '');
 
 			//Subscribe
@@ -92,13 +97,21 @@ export class MattermostTrigger implements INodeType {
 			});
 
 			client.on('error', (error) => {
-				throw new ApplicationError(`WebSocket error: ${error}`);
+				//throw new ApplicationError(`WebSocket error: ${error}`);
+				console.log(`WebSocket error: ${error}`);
+				if (!isClosing) startConsumer();
+			});
+
+			client.on('close', (code, reason) => {
+				console.log(`WebSocket closed: ${code} - ${reason}`);
+				if (!isClosing) startConsumer();
 			});
 		};
 		await startConsumer();
 
 		const closeFunction = async () => {
 			// Clean up any resources that were allocated during the connection
+			isClosing = true;
 			client.close();
 		};
 
