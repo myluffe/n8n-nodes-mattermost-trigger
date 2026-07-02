@@ -44,6 +44,7 @@
     ]
   },
   "devDependencies": {
+    "@n8n/node-cli": "*",
     "@types/ws": "^8.18.1",
     "@typescript-eslint/parser": "~8.32.0",
     "eslint": "^8.57.0",
