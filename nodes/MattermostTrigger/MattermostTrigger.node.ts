@@ -63,7 +63,10 @@ export class MattermostTrigger implements INodeType {
 		)) as MattermostCredentialData;
 		const events = getAllowedEvents(this);
 
+		let pingInterval: NodeJS.Timeout;
+
 		const startConsumer = async () => {
+			clearInterval(pingInterval);
 			isClosing = false;
 			// Establish the Websocket connection and set up event listeners
 
@@ -72,6 +75,15 @@ export class MattermostTrigger implements INodeType {
 				`Connecting to Mattermost WebSocket at ${credentials.baseUrl}`
 			);
 			client = InitClient(credentials.baseUrl, credentials.token || '');
+
+			client.on('open', () => {
+				console.log('WebSocket connected successfully');
+				pingInterval = setInterval(() => {
+					if (client.readyState === WebSocket.OPEN) {
+						client.ping();
+					}
+				}, 5000);
+			});
 
 			//Subscribe
 			client.on('message', (data: Data) => {
@@ -103,6 +115,7 @@ export class MattermostTrigger implements INodeType {
 			});
 
 			client.on('close', (code, reason) => {
+				clearInterval(pingInterval);
 				console.log(`WebSocket closed: ${code} - ${reason}`);
 				if (!isClosing) startConsumer();
 			});
