@@ -74,6 +74,12 @@ export class MattermostTrigger implements INodeType {
 			console.log(
 				`Connecting to Mattermost WebSocket at ${credentials.baseUrl}`
 			);
+			if (client) {
+				client.removeAllListeners();
+				try {
+					client.terminate();
+				} catch (e) {}
+			}
 			client = InitClient(credentials.baseUrl, credentials.token || '');
 
 			client.on('open', () => {
@@ -110,8 +116,9 @@ export class MattermostTrigger implements INodeType {
 
 			client.on('error', (error) => {
 				//throw new ApplicationError(`WebSocket error: ${error}`);
-				console.log(`WebSocket error: ${error}`);
-				if (!isClosing) startConsumer();
+				console.error(
+					`WebSocket error encountered: ${error.message || error}`
+				);
 			});
 
 			client.on('close', (code, reason) => {
@@ -120,7 +127,7 @@ export class MattermostTrigger implements INodeType {
 				if (!isClosing) {
 					setTimeout(() => {
 						startConsumer();
-					}, 300);
+					}, 500);
 				}
 			});
 		};
