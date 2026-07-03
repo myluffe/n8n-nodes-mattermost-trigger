@@ -117,7 +117,11 @@ export class MattermostTrigger implements INodeType {
 			client.on('close', (code, reason) => {
 				clearInterval(pingInterval);
 				console.log(`WebSocket closed: ${code} - ${reason}`);
-				if (!isClosing) startConsumer();
+				if (!isClosing) {
+					setTimeout(() => {
+						startConsumer();
+					}, 300);
+				}
 			});
 		};
 		await startConsumer();
