@@ -15,6 +15,8 @@ import {
 	MattermostCredentialData,
 } from '../../credentials/MattermostTriggerApi.credentials';
 
+import { LoggerProxy as Logger } from 'n8n-workflow';
+
 import {
 	getAllowedEvents,
 	getEventsByResource,
@@ -57,22 +59,30 @@ export class MattermostTrigger implements INodeType {
 
 	async trigger(this: ITriggerFunctions): Promise<ITriggerResponse> {
 		let isClosing = true;
+		let isAlive = false;
 		let client: WebSocket;
+
+		let pingInterval: NodeJS.Timeout;
+		const wait = 10000; // 10 seconds
+
 		const credentials = (await this.getCredentials(
 			'mattermostTriggerApi'
 		)) as MattermostCredentialData;
 		const events = getAllowedEvents(this);
 
-		let pingInterval: NodeJS.Timeout;
-
 		const startConsumer = async () => {
 			clearInterval(pingInterval);
+
 			isClosing = false;
 			// Establish the Websocket connection and set up event listeners
 
 			//Create client
-			console.log(
-				`Connecting to Mattermost WebSocket at ${credentials.baseUrl}`
+			Logger.info(
+				`[${this.getNode.name}] Connecting to Mattermost WebSocket at "${credentials.baseUrl}"`,
+				{
+					workflowName: this.getWorkflow().name,
+					workflowId: this.getWorkflow().id,
+				}
 			);
 			if (client) {
 				client.removeAllListeners();
@@ -83,12 +93,32 @@ export class MattermostTrigger implements INodeType {
 			client = InitClient(credentials.baseUrl, credentials.token || '');
 
 			client.on('open', () => {
-				console.log('WebSocket connected successfully');
+				isAlive = true;
+				Logger.info(
+					`[${this.getNode.name}] WebSocket connected successfully`,
+					{
+						workflowName: this.getWorkflow().name,
+						workflowId: this.getWorkflow().id,
+					}
+				);
+
 				pingInterval = setInterval(() => {
+					if (!isAlive) {
+						Logger.error(
+							`[${this.getNode.name}] Server failed to respond to ping in time. Terminating...`,
+							{
+								workflowName: this.getWorkflow().name,
+								workflowId: this.getWorkflow().id,
+							}
+						);
+						return client.terminate();
+					}
+
+					isAlive = false;
 					if (client.readyState === WebSocket.OPEN) {
 						client.ping();
 					}
-				}, 5000);
+				}, wait);
 			});
 
 			//Subscribe
@@ -97,9 +127,6 @@ export class MattermostTrigger implements INodeType {
 					const messageObj = JSON.parse(data.toString());
 					const event = messageObj.event;
 					if (events.includes(event)) {
-						//console.log(
-						//`Send event=${event}; allowedevents=${events};`
-						//);
 						this.emit([this.helpers.returnJsonArray([messageObj])]);
 					} else {
 						//console.log(
@@ -107,23 +134,44 @@ export class MattermostTrigger implements INodeType {
 						//);
 					}
 				} catch (e) {
-					console.error(e);
+					Logger.error(
+						`[${this.getNode.name}] Failed to parse WebSocket data: ${data}`,
+						{
+							workflowName: this.getWorkflow().name,
+							workflowId: this.getWorkflow().id,
+						}
+					);
 					throw new ApplicationError(
 						`Failed to parse WebSocket data: ${data}`
 					);
 				}
 			});
 
+			client.on('pong', () => {
+				isAlive = true;
+			});
+
 			client.on('error', (error) => {
 				//throw new ApplicationError(`WebSocket error: ${error}`);
-				console.error(
-					`WebSocket error encountered: ${error.message || error}`
+				Logger.error(
+					`[${this.getNode.name}] WebSocket error encountered: ${error.message || error}`,
+					{
+						workflowName: this.getWorkflow().name,
+						workflowId: this.getWorkflow().id,
+					}
 				);
 			});
 
 			client.on('close', (code, reason) => {
 				clearInterval(pingInterval);
-				console.log(`WebSocket closed: ${code} - ${reason}`);
+				Logger.info(
+					`[${this.getNode.name}] WebSocket closed: ${code} - ${reason}`,
+					{
+						workflowName: this.getWorkflow().name,
+						workflowId: this.getWorkflow().id,
+					}
+				);
+				// Attempt to reconnect after a delay if the connection was not intentionally closed
 				if (!isClosing) {
 					setTimeout(() => {
 						startConsumer();
